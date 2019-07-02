@@ -56,6 +56,17 @@ FontGetDescent(font* Font)
     return Scale * Descent;
 }
 
+int
+FontLineAdvance(font* Font)
+{
+    float Scale = stbtt_ScaleForPixelHeight(&Font->TTF, Font->Size);
+
+    int Ascent, Descent, LineGap;
+    stbtt_GetFontVMetrics(&Font->TTF, &Ascent, &Descent, &LineGap);
+    
+    return Scale * (Ascent - Descent + LineGap);
+}
+
 
 struct pixel_buffer
 {
@@ -90,8 +101,6 @@ PixelBufferDrawText(pixel_buffer* Buffer, font* Font, const char* Text, int DstX
         int Advance, Bearing;
         stbtt_GetCodepointHMetrics(&Font->TTF, *Text, &Advance, &Bearing);
 
-        printf("Char(%c): off (%d, %d), Size(%d, %d), Bearing(%f)\n", *Text, Xoff, Yoff, GlyphW, GlyphH, Bearing*Scale);
-
         for (int Y = 0; Y < GlyphH; Y++)
         {
             for (int X = 0; X < GlyphW; X++)
@@ -116,6 +125,27 @@ PixelBufferDrawText(pixel_buffer* Buffer, font* Font, const char* Text, int DstX
     }
 }
 
+void
+PixelBufferDrawRect(pixel_buffer* Buffer, int RX, int RY, int RW, int RH, uint32_t RGB)
+{
+    for (int Y = RY; Y < RY+RH; Y++)
+    {
+        for (int X = RX; X < RX+RW; X++)
+        {
+            if (0 <= X && X < Buffer->Width && 0 <= Y && Y < Buffer->Height)
+            {
+                uint32_t* Out = (uint32_t*)&Buffer->Data[Y * Buffer->Stride + X * 4];
+                *Out = RGB;
+            }
+        }
+    }
+}
+
+struct line
+{
+    int Length;
+    char Data[1024];
+};
 
 int main(int argc, char** argv)
 {
@@ -134,14 +164,19 @@ int main(int argc, char** argv)
     BackBuffer.Data   = (unsigned char*)malloc(800 * 600 * 4);
     BackBuffer.Stride = BackBuffer.Width * 4;
 
+    const char* Prompt = "dmarquant@my-desktop:/home/dmarquant$ ";
+    int PromptLen = strlen(Prompt);
 
-    char CurrentLine[1024];
-    strcpy(CurrentLine, "dmarquant@my-desktop:/home/dmarquant$ ");
 
     // Load font
     font Font = {};
     LoadFont(&Font, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
     Font.Size = 16;
+
+    int NumLines = 1;
+    line LineBuffer[1000];
+    strcpy(LineBuffer[0].Data, Prompt);
+
 
 
     SDL_StartTextInput();
@@ -154,6 +189,8 @@ int main(int argc, char** argv)
         {
             switch (E.type)
             {
+                // TODO: Handle window resize
+
                 case SDL_KEYUP:
                 {
                     if (E.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
@@ -163,9 +200,33 @@ int main(int argc, char** argv)
                 }
                 break;
 
+                case SDL_KEYDOWN:
+                {
+                    if (E.key.keysym.scancode == SDL_SCANCODE_RETURN)
+                    {
+                        // TODO: Execute command
+
+                        NumLines++;
+                        strcpy(LineBuffer[NumLines-1].Data, "Output of: ");
+                        strcat(LineBuffer[NumLines-1].Data, LineBuffer[NumLines-2].Data + PromptLen);
+
+                        NumLines++;
+                        strcpy(LineBuffer[NumLines-1].Data, Prompt);
+                    }
+                    else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
+                    {
+                        int Len = strlen(LineBuffer[NumLines-1].Data);                        
+                        if (Len > PromptLen)
+                        {
+                            LineBuffer[NumLines-1].Data[Len-1] = 0;
+                        }
+                    }
+                }
+                break;
+
                 case SDL_TEXTINPUT:
                 {
-                    strcat(CurrentLine, E.text.text);
+                    strcat(LineBuffer[NumLines-1].Data, E.text.text);
                 }
                 break;
             }
@@ -175,7 +236,29 @@ int main(int argc, char** argv)
 
         // TODO: Line wrapping
         int FontDescent = FontGetDescent(&Font);
-        PixelBufferDrawText(&BackBuffer, &Font, CurrentLine, 0, BackBuffer.Height + FontDescent, 0xffffff);
+        int LineAdvance = FontLineAdvance(&Font);
+
+        int ContentHeight = NumLines * LineAdvance;
+
+        int YPos = BackBuffer.Height + FontDescent;
+        for (int i = NumLines-1; i >= 0; i--) {
+            PixelBufferDrawText(&BackBuffer, &Font, LineBuffer[i].Data, 1, YPos, 0xffffff);
+            YPos -= LineAdvance;
+        }
+
+        // Draw scroll bar
+        int ScrollBarWidth = 14;
+
+        float VisibleRatio = (float)BackBuffer.Height / ContentHeight;
+        if (VisibleRatio > 1.0f)
+            VisibleRatio = 1.0f;
+
+
+        int ScrollBarHeight = VisibleRatio * BackBuffer.Height - 4; // TODO: Introduce Pad variables
+
+        PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth, 0, ScrollBarWidth, BackBuffer.Height, 0x5e5e5e);
+        PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth + 2, 2, ScrollBarWidth-4, ScrollBarHeight, 0xaeaeae);
+
 
         // Copy back buffer to screen
         SDL_UpdateTexture(BackBufferTexture, NULL, BackBuffer.Data, BackBuffer.Stride);
