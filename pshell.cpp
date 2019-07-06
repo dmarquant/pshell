@@ -5,6 +5,24 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+int
+MinI(int A, int B)
+{
+    if (A < B)
+        return A;
+    else
+        return B;
+}
+
+int
+MaxI(int A, int B)
+{
+    if (A > B)
+        return A;
+    else
+        return B;
+}
+
 uint32_t
 Blend(uint32_t C1, uint32_t C2, uint8_t A)
 {
@@ -54,6 +72,17 @@ FontGetDescent(font* Font)
     stbtt_GetFontVMetrics(&Font->TTF, &Ascent, &Descent, &LineGap);
     
     return Scale * Descent;
+}
+
+int
+FontGetAscent(font* Font)
+{
+    float Scale = stbtt_ScaleForPixelHeight(&Font->TTF, Font->Size);
+
+    int Ascent, Descent, LineGap;
+    stbtt_GetFontVMetrics(&Font->TTF, &Ascent, &Descent, &LineGap);
+    
+    return Scale * Ascent;
 }
 
 int
@@ -175,15 +204,27 @@ int main(int argc, char** argv)
 
     int NumLines = 1;
     line LineBuffer[1000];
-    strcpy(LineBuffer[0].Data, Prompt);
+
+    for (int i = 0; i < 60; i++) {
+        sprintf(LineBuffer[i].Data, "%s%d", Prompt, i);
+        NumLines++;
+    }
+
+    strcpy(LineBuffer[NumLines-1].Data, Prompt);
 
 
+    int ScrollPosition = 0;
+
+
+    int LineAdvance = FontLineAdvance(&Font);
+    int ContentHeight = NumLines * LineAdvance;
 
     SDL_StartTextInput();
-
     bool Running = true;
     while (Running)
     {
+        bool AutoScroll = false;
+
         SDL_Event E;
         while (SDL_PollEvent(&E))
         {
@@ -193,9 +234,14 @@ int main(int argc, char** argv)
 
                 case SDL_KEYUP:
                 {
-                    if (E.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
+                    switch (E.key.keysym.scancode)
                     {
-                        Running = false;
+                        case SDL_SCANCODE_ESCAPE:
+                        {
+                            Running = false;
+                        }
+                        break;
+
                     }
                 }
                 break;
@@ -212,6 +258,10 @@ int main(int argc, char** argv)
 
                         NumLines++;
                         strcpy(LineBuffer[NumLines-1].Data, Prompt);
+
+                        ContentHeight = NumLines * LineAdvance;
+
+                        AutoScroll = true;
                     }
                     else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
                     {
@@ -220,6 +270,15 @@ int main(int argc, char** argv)
                         {
                             LineBuffer[NumLines-1].Data[Len-1] = 0;
                         }
+                        AutoScroll = true;
+                    }
+                    else if (E.key.keysym.scancode == SDL_SCANCODE_UP)
+                    {
+                        ScrollPosition = MaxI(ScrollPosition - LineAdvance, 0);
+                    }
+                    else if (E.key.keysym.scancode == SDL_SCANCODE_DOWN)
+                    {
+                        ScrollPosition = MinI(ScrollPosition + LineAdvance, ContentHeight - BackBuffer.Height);
                     }
                 }
                 break;
@@ -227,23 +286,28 @@ int main(int argc, char** argv)
                 case SDL_TEXTINPUT:
                 {
                     strcat(LineBuffer[NumLines-1].Data, E.text.text);
+                    AutoScroll = true;
                 }
                 break;
             }
         }
 
+        if (AutoScroll)
+        {
+            // Scroll down to current line
+            ScrollPosition = ContentHeight - BackBuffer.Height;
+        }
+
         memset(BackBuffer.Data, 0, 800*600*4);
 
         // TODO: Line wrapping
-        int FontDescent = FontGetDescent(&Font);
-        int LineAdvance = FontLineAdvance(&Font);
+        int FontAscent = FontGetAscent(&Font);
 
-        int ContentHeight = NumLines * LineAdvance;
 
-        int YPos = BackBuffer.Height + FontDescent;
-        for (int i = NumLines-1; i >= 0; i--) {
-            PixelBufferDrawText(&BackBuffer, &Font, LineBuffer[i].Data, 1, YPos, 0xffffff);
-            YPos -= LineAdvance;
+        int YPos = FontAscent;
+        for (int i = 0; i < NumLines; i++) {
+            PixelBufferDrawText(&BackBuffer, &Font, LineBuffer[i].Data, 1, YPos - ScrollPosition, 0xffffff);
+            YPos += LineAdvance;
         }
 
         // Draw scroll bar
@@ -253,11 +317,15 @@ int main(int argc, char** argv)
         if (VisibleRatio > 1.0f)
             VisibleRatio = 1.0f;
 
+        int ScrollBarHeight = VisibleRatio * (BackBuffer.Height - 4); // TODO: Introduce Pad variables
 
-        int ScrollBarHeight = VisibleRatio * BackBuffer.Height - 4; // TODO: Introduce Pad variables
+        int ScrollBarPosition = ((float)ScrollPosition / ContentHeight) * (BackBuffer.Height - 4);
+
 
         PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth, 0, ScrollBarWidth, BackBuffer.Height, 0x5e5e5e);
-        PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth + 2, 2, ScrollBarWidth-4, ScrollBarHeight, 0xaeaeae);
+        PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth + 2, 2 + ScrollBarPosition, ScrollBarWidth-4, ScrollBarHeight, 0xaeaeae);
+
+        printf("ScrollBar Pos: %d\n", ScrollBarPosition);
 
 
         // Copy back buffer to screen
@@ -265,7 +333,5 @@ int main(int argc, char** argv)
         SDL_RenderClear(Renderer);
         SDL_RenderCopy(Renderer, BackBufferTexture, NULL, NULL);
         SDL_RenderPresent(Renderer);
-
-        SDL_Delay(100);
     }
 }
