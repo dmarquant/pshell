@@ -1,13 +1,12 @@
 Milestone 1:
 
 * Terminal emulator
-	- window handling
-	- font rendering
-	- text input
+    - window handling
+        . Resize
 
 * Execute command
-	- start process
-	- read back stdout/stderr
+    - start process
+    - read back stdout/stderr
 
 * Interactive command (stdin)
 

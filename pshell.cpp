@@ -181,16 +181,19 @@ int main(int argc, char** argv)
 
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Window* Window = SDL_CreateWindow("PSHELL", 0, 0, 800, 600, 0);
+    int WindowWidth = 800;
+    int WindowHeight = 600;
+
+    SDL_Window* Window = SDL_CreateWindow("PSHELL", 0, 0, WindowWidth, WindowHeight, 0);
 
     SDL_Renderer* Renderer = SDL_CreateRenderer(Window, -1, SDL_RENDERER_ACCELERATED);
 
-    SDL_Texture* BackBufferTexture = SDL_CreateTexture(Renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 800, 600);
+    SDL_Texture* BackBufferTexture = SDL_CreateTexture(Renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WindowWidth, WindowHeight);
 
     pixel_buffer BackBuffer = {};
-    BackBuffer.Width  = 800;
-    BackBuffer.Height = 600;
-    BackBuffer.Data   = (unsigned char*)malloc(800 * 600 * 4);
+    BackBuffer.Width  = WindowWidth;
+    BackBuffer.Height = WindowHeight;
+    BackBuffer.Data   = (unsigned char*)malloc(WindowWidth * WindowHeight * 4);
     BackBuffer.Stride = BackBuffer.Width * 4;
 
     const char* Prompt = "dmarquant@my-desktop:/home/dmarquant$ ";
@@ -205,7 +208,7 @@ int main(int argc, char** argv)
     int NumLines = 1;
     line LineBuffer[1000];
 
-    for (int i = 0; i < 60; i++) {
+    for (int i = 0; i < 6; i++) {
         sprintf(LineBuffer[i].Data, "%s%d", Prompt, i);
         NumLines++;
     }
@@ -280,6 +283,14 @@ int main(int argc, char** argv)
                     {
                         ScrollPosition = MinI(ScrollPosition + LineAdvance, ContentHeight - BackBuffer.Height);
                     }
+                    else if (E.key.keysym.scancode == SDL_SCANCODE_PAGEUP)
+                    {
+                        ScrollPosition = MaxI(ScrollPosition - BackBuffer.Height, 0);
+                    }
+                    else if (E.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN)
+                    {
+                        ScrollPosition = MinI(ScrollPosition + BackBuffer.Height, ContentHeight - BackBuffer.Height);
+                    }
                 }
                 break;
 
@@ -295,10 +306,10 @@ int main(int argc, char** argv)
         if (AutoScroll)
         {
             // Scroll down to current line
-            ScrollPosition = ContentHeight - BackBuffer.Height;
+            ScrollPosition = MaxI(0, ContentHeight - BackBuffer.Height);
         }
 
-        memset(BackBuffer.Data, 0, 800*600*4);
+        memset(BackBuffer.Data, 0, BackBuffer.Width*BackBuffer.Height*4);
 
         // TODO: Line wrapping
         int FontAscent = FontGetAscent(&Font);
