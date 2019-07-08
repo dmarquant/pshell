@@ -5,6 +5,8 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+#include "linebuffer.cpp"
+
 int
 MinI(int A, int B)
 {
@@ -110,25 +112,25 @@ struct pixel_buffer
 
 
 void 
-PixelBufferDrawText(pixel_buffer* Buffer, font* Font, const char* Text, int DstX, int DstY, Uint32 RGB)
+PixelBufferDrawText(pixel_buffer* Buffer, font* Font, const char* Text, int Size, int DstX, int DstY, Uint32 RGB)
 {
     float Scale = stbtt_ScaleForPixelHeight(&Font->TTF, Font->Size);
     //float Scale = stbtt_ScaleForMappingEmToPixels(&Font->TTF, Size);
 
     int PosX = DstX;
 
-    while (*Text)
+    for (int I = 0; I < Size; I++) 
     {
         int GlyphW, GlyphH;
         int Xoff, Yoff;
 
         // TODO: Use subpixel APIs
         // TODO: Allocate single buffer to hold the whole string instead
-        unsigned char* GlyphBitmap = stbtt_GetCodepointBitmap(&Font->TTF, 0, Scale, *Text,
+        unsigned char* GlyphBitmap = stbtt_GetCodepointBitmap(&Font->TTF, 0, Scale, Text[I],
                                                               &GlyphW, &GlyphH, &Xoff, &Yoff);
 
         int Advance, Bearing;
-        stbtt_GetCodepointHMetrics(&Font->TTF, *Text, &Advance, &Bearing);
+        stbtt_GetCodepointHMetrics(&Font->TTF, Text[I], &Advance, &Bearing);
 
         for (int Y = 0; Y < GlyphH; Y++)
         {
@@ -147,8 +149,6 @@ PixelBufferDrawText(pixel_buffer* Buffer, font* Font, const char* Text, int DstX
         }
 
         PosX += Scale*Advance;
-
-        Text++;
 
         free(GlyphBitmap);
     }
@@ -169,12 +169,6 @@ PixelBufferDrawRect(pixel_buffer* Buffer, int RX, int RY, int RW, int RH, uint32
         }
     }
 }
-
-struct line
-{
-    int Length;
-    char Data[1024];
-};
 
 int main(int argc, char** argv)
 {
@@ -199,28 +193,30 @@ int main(int argc, char** argv)
     const char* Prompt = "dmarquant@my-desktop:/home/dmarquant$ ";
     int PromptLen = strlen(Prompt);
 
+    line_buffer LineBuffer = {};
+    LineBufferInit(&LineBuffer);
+
 
     // Load font
     font Font = {};
     LoadFont(&Font, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
     Font.Size = 16;
 
-    int NumLines = 1;
-    line LineBuffer[1000];
+    char WorkBuffer[2000];
 
     for (int i = 0; i < 6; i++) {
-        sprintf(LineBuffer[i].Data, "%s%d", Prompt, i);
-        NumLines++;
+        sprintf(WorkBuffer, "%s%d", Prompt, i);
+        LineBufferAddLine(&LineBuffer, WorkBuffer);
     }
 
-    strcpy(LineBuffer[NumLines-1].Data, Prompt);
+    strcpy(WorkBuffer, Prompt);
 
 
     int ScrollPosition = 0;
 
 
     int LineAdvance = FontLineAdvance(&Font);
-    int ContentHeight = NumLines * LineAdvance;
+    int ContentHeight = (LineBuffer.NumLines+1) * LineAdvance;
 
     SDL_StartTextInput();
     bool Running = true;
@@ -254,24 +250,28 @@ int main(int argc, char** argv)
                     if (E.key.keysym.scancode == SDL_SCANCODE_RETURN)
                     {
                         // TODO: Execute command
+                        LineBufferAddLine(&LineBuffer, WorkBuffer);
 
-                        NumLines++;
-                        strcpy(LineBuffer[NumLines-1].Data, "Output of: ");
-                        strcat(LineBuffer[NumLines-1].Data, LineBuffer[NumLines-2].Data + PromptLen);
+                        // TODO: Clean this up this looks like poop
+                        strcpy(WorkBuffer, "Output of: ");
+                        strncpy(WorkBuffer + sizeof("Output of: ") - 1, LineBuffer.Lines[LineBuffer.NumLines-1].String + PromptLen,
+                                LineBuffer.Lines[LineBuffer.NumLines-1].Size - PromptLen);
+                        WorkBuffer[sizeof("Output of: ") - 1 + LineBuffer.Lines[LineBuffer.NumLines-1].Size - PromptLen] = 0;
 
-                        NumLines++;
-                        strcpy(LineBuffer[NumLines-1].Data, Prompt);
+                        LineBufferAddLine(&LineBuffer, WorkBuffer);
 
-                        ContentHeight = NumLines * LineAdvance;
+                        strcpy(WorkBuffer, Prompt);
+
+                        ContentHeight = (LineBuffer.NumLines+1) * LineAdvance;
 
                         AutoScroll = true;
                     }
                     else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
                     {
-                        int Len = strlen(LineBuffer[NumLines-1].Data);                        
+                        int Len = strlen(WorkBuffer);                        
                         if (Len > PromptLen)
                         {
-                            LineBuffer[NumLines-1].Data[Len-1] = 0;
+                            WorkBuffer[Len-1] = 0;
                         }
                         AutoScroll = true;
                     }
@@ -296,7 +296,7 @@ int main(int argc, char** argv)
 
                 case SDL_TEXTINPUT:
                 {
-                    strcat(LineBuffer[NumLines-1].Data, E.text.text);
+                    strcat(WorkBuffer, E.text.text);
                     AutoScroll = true;
                 }
                 break;
@@ -316,10 +316,13 @@ int main(int argc, char** argv)
 
 
         int YPos = FontAscent;
-        for (int i = 0; i < NumLines; i++) {
-            PixelBufferDrawText(&BackBuffer, &Font, LineBuffer[i].Data, 1, YPos - ScrollPosition, 0xffffff);
+        for (int i = 0; i < LineBuffer.NumLines; i++) {
+            line* Line = &LineBuffer.Lines[i];
+            PixelBufferDrawText(&BackBuffer, &Font, Line->String, Line->Size, 1, YPos - ScrollPosition, 0xffffff);
             YPos += LineAdvance;
         }
+            
+        PixelBufferDrawText(&BackBuffer, &Font, WorkBuffer, strlen(WorkBuffer), 1, YPos - ScrollPosition, 0xffffff);
 
         // Draw scroll bar
         int ScrollBarWidth = 14;
@@ -335,8 +338,6 @@ int main(int argc, char** argv)
 
         PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth, 0, ScrollBarWidth, BackBuffer.Height, 0x5e5e5e);
         PixelBufferDrawRect(&BackBuffer, BackBuffer.Width - ScrollBarWidth + 2, 2 + ScrollBarPosition, ScrollBarWidth-4, ScrollBarHeight, 0xaeaeae);
-
-        printf("ScrollBar Pos: %d\n", ScrollBarPosition);
 
 
         // Copy back buffer to screen

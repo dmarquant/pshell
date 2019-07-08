@@ -85,6 +85,7 @@ LineBufferAddLine(line_buffer* LineBuffer, const char* CStr)
     CurrentBlock->NextFreeLocation += Length;
 }
 
+#if 0
 int main(int argc, char** argv)
 {
     line_buffer LineBuffer = {};
@@ -117,3 +118,4 @@ int main(int argc, char** argv)
 
     char c = fgetc(stdin);
 }
+#endif
