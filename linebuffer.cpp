@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#define LINE_BUFFER_BLOCK_SIZE 1024 * 1024
+#define LINE_BUFFER_BLOCK_SIZE 300//1024 * 1024
 #define LINE_CAPACITY 8192
 
 
@@ -52,7 +52,7 @@ LineBufferAddLine(line_buffer* LineBuffer, const char* CStr)
     while (CurrentBlock->NextBlock)
         CurrentBlock = CurrentBlock->NextBlock;
 
-    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock);
+    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock) - 1;
 
     int Length = strlen(CStr);
 
@@ -65,6 +65,7 @@ LineBufferAddLine(line_buffer* LineBuffer, const char* CStr)
         CurrentBlock->NextBlock = (memory_block*)NewBlock;
         CurrentBlock = CurrentBlock->NextBlock;
         CurrentBlock->NextFreeLocation = NewBlock + offsetof(memory_block, Data);
+        CurrentBlock->NextBlock = 0;
     }
 
     // TODO: Check capacity
@@ -85,6 +86,47 @@ LineBufferAddLine(line_buffer* LineBuffer, const char* CStr)
     CurrentBlock->NextFreeLocation += Length;
 }
 
+void
+LineBufferAppendToCurrentLine(line_buffer* LineBuffer, const char* Str, int Size)
+{
+    memory_block* CurrentBlock = LineBuffer->FirstBlock;
+    while (CurrentBlock->NextBlock)
+        CurrentBlock = CurrentBlock->NextBlock;
+
+    line* CurrentLine = &LineBuffer->Lines[LineBuffer->NumLines-1];
+
+    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock) - 1;
+    if (CapacityLeft > Size)
+    {
+
+        memcpy(CurrentLine->String + CurrentLine->Size, Str, Size);
+        CurrentLine->Size += Size;
+
+        CurrentBlock->NextFreeLocation += Size;
+    }
+    else
+    {
+        printf("Block full: %p, capacity: %d\n", CurrentBlock, CapacityLeft);
+
+        int NewSize = CurrentLine->Size + Size;
+
+        char* NewBlock = (char*)malloc(LINE_BUFFER_BLOCK_SIZE);
+        CurrentBlock->NextBlock = (memory_block*)NewBlock;
+        CurrentBlock = CurrentBlock->NextBlock;
+        CurrentBlock->NextFreeLocation = NewBlock + offsetof(memory_block, Data);
+        CurrentBlock->NextBlock = 0;
+
+        memcpy(CurrentBlock->NextFreeLocation, CurrentLine->String, CurrentLine->Size);
+        CurrentLine->String = CurrentBlock->NextFreeLocation;
+        CurrentBlock->NextFreeLocation += CurrentLine->Size;
+        
+        memcpy(CurrentBlock->NextFreeLocation, Str, Size);
+        CurrentBlock->NextFreeLocation += Size;
+
+        CurrentLine->Size = NewSize;
+    }
+}
+
 #if 0
 int main(int argc, char** argv)
 {
@@ -98,7 +140,7 @@ int main(int argc, char** argv)
         LineBufferAddLine(&LineBuffer, "Ich bin ein Berliner");
         LineBufferAddLine(&LineBuffer, "I have a dream");
         LineBufferAddLine(&LineBuffer, "Yes we can");
-        LineBufferAddLine(&LineBuffer, "Keiner will eine Mauer bauen");
+        LineBufferAddLine(&LineBuffer, "Niemand will eine Mauer bauen");
     }
 
     for (int I = 0; I < LineBuffer.NumLines; I += 1)

@@ -202,21 +202,19 @@ int main(int argc, char** argv)
     LoadFont(&Font, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
     Font.Size = 16;
 
-    char WorkBuffer[2000];
-
     for (int i = 0; i < 6; i++) {
+        char WorkBuffer[1000];
         sprintf(WorkBuffer, "%s%d", Prompt, i);
         LineBufferAddLine(&LineBuffer, WorkBuffer);
     }
 
-    strcpy(WorkBuffer, Prompt);
-
+    LineBufferAddLine(&LineBuffer, Prompt);
 
     int ScrollPosition = 0;
 
 
     int LineAdvance = FontLineAdvance(&Font);
-    int ContentHeight = (LineBuffer.NumLines+1) * LineAdvance;
+    int ContentHeight = LineBuffer.NumLines * LineAdvance;
 
     SDL_StartTextInput();
     bool Running = true;
@@ -250,28 +248,25 @@ int main(int argc, char** argv)
                     if (E.key.keysym.scancode == SDL_SCANCODE_RETURN)
                     {
                         // TODO: Execute command
-                        LineBufferAddLine(&LineBuffer, WorkBuffer);
 
-                        // TODO: Clean this up this looks like poop
-                        strcpy(WorkBuffer, "Output of: ");
-                        strncpy(WorkBuffer + sizeof("Output of: ") - 1, LineBuffer.Lines[LineBuffer.NumLines-1].String + PromptLen,
-                                LineBuffer.Lines[LineBuffer.NumLines-1].Size - PromptLen);
-                        WorkBuffer[sizeof("Output of: ") - 1 + LineBuffer.Lines[LineBuffer.NumLines-1].Size - PromptLen] = 0;
+                        LineBufferAddLine(&LineBuffer, "Output of: ");
+                        LineBufferAppendToCurrentLine(&LineBuffer, LineBuffer.Lines[LineBuffer.NumLines-2].String + PromptLen,
+                                LineBuffer.Lines[LineBuffer.NumLines-2].Size - PromptLen);
 
-                        LineBufferAddLine(&LineBuffer, WorkBuffer);
+                        LineBufferAddLine(&LineBuffer, Prompt);
 
-                        strcpy(WorkBuffer, Prompt);
-
-                        ContentHeight = (LineBuffer.NumLines+1) * LineAdvance;
+                        ContentHeight = LineBuffer.NumLines * LineAdvance;
 
                         AutoScroll = true;
                     }
                     else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
                     {
-                        int Len = strlen(WorkBuffer);                        
-                        if (Len > PromptLen)
+                        line* CurrentLine = &LineBuffer.Lines[LineBuffer.NumLines-1];
+
+                        if (CurrentLine->Size > PromptLen)
                         {
-                            WorkBuffer[Len-1] = 0;
+                            CurrentLine->Size--;
+                            CurrentLine->String[CurrentLine->Size] = 0;
                         }
                         AutoScroll = true;
                     }
@@ -296,7 +291,7 @@ int main(int argc, char** argv)
 
                 case SDL_TEXTINPUT:
                 {
-                    strcat(WorkBuffer, E.text.text);
+                    LineBufferAppendToCurrentLine(&LineBuffer, E.text.text, strlen(E.text.text));
                     AutoScroll = true;
                 }
                 break;
@@ -321,8 +316,6 @@ int main(int argc, char** argv)
             PixelBufferDrawText(&BackBuffer, &Font, Line->String, Line->Size, 1, YPos - ScrollPosition, 0xffffff);
             YPos += LineAdvance;
         }
-            
-        PixelBufferDrawText(&BackBuffer, &Font, WorkBuffer, strlen(WorkBuffer), 1, YPos - ScrollPosition, 0xffffff);
 
         // Draw scroll bar
         int ScrollBarWidth = 14;
