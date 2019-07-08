@@ -52,7 +52,7 @@ LineBufferAddLine(line_buffer* LineBuffer, const char* CStr)
     while (CurrentBlock->NextBlock)
         CurrentBlock = CurrentBlock->NextBlock;
 
-    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock) - 1;
+    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock);
 
     int Length = strlen(CStr);
 
@@ -95,7 +95,7 @@ LineBufferAppendToCurrentLine(line_buffer* LineBuffer, const char* Str, int Size
 
     line* CurrentLine = &LineBuffer->Lines[LineBuffer->NumLines-1];
 
-    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock) - 1;
+    int CapacityLeft = LINE_BUFFER_BLOCK_SIZE - (CurrentBlock->NextFreeLocation - (char*)CurrentBlock);
     if (CapacityLeft > Size)
     {
 
@@ -106,8 +106,6 @@ LineBufferAppendToCurrentLine(line_buffer* LineBuffer, const char* Str, int Size
     }
     else
     {
-        printf("Block full: %p, capacity: %d\n", CurrentBlock, CapacityLeft);
-
         int NewSize = CurrentLine->Size + Size;
 
         char* NewBlock = (char*)malloc(LINE_BUFFER_BLOCK_SIZE);
