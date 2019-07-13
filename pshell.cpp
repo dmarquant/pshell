@@ -77,6 +77,17 @@ FontGetDescent(font* Font)
 }
 
 int
+FontGetWidth(font* Font)
+{
+    float Scale = stbtt_ScaleForPixelHeight(&Font->TTF, Font->Size);
+
+    int Advance, Bearing;
+    stbtt_GetCodepointHMetrics(&Font->TTF, 'M', &Advance, &Bearing);
+
+    return Scale * Advance;
+}
+
+int
 FontGetAscent(font* Font)
 {
     float Scale = stbtt_ScaleForPixelHeight(&Font->TTF, Font->Size);
@@ -170,6 +181,21 @@ PixelBufferDrawRect(pixel_buffer* Buffer, int RX, int RY, int RW, int RH, uint32
     }
 }
 
+int
+ComputeContentHeight(line_buffer* LineBuffer, int TextAreaWidth, font* Font) {
+    int NumRows = 0;
+
+    int CharacterWidth = FontGetWidth(Font);
+
+    int CharactersPerRow = TextAreaWidth / CharacterWidth;
+
+    for (int I = 0; I < LineBuffer->NumLines; I++) {
+        line* Line = &LineBuffer->Lines[I];
+        NumRows += Line->Size / CharactersPerRow + ((Line->Size % CharactersPerRow) ? 1 : 0);
+    }
+    return NumRows * FontLineAdvance(Font);
+}
+
 int main(int argc, char** argv)
 {
 
@@ -210,11 +236,13 @@ int main(int argc, char** argv)
 
     LineBufferAddLine(&LineBuffer, Prompt);
 
+    int ScrollBarWidth = 14;
     int ScrollPosition = 0;
 
+    int CharacterWidth = FontGetWidth(&Font);
 
     int LineAdvance = FontLineAdvance(&Font);
-    int ContentHeight = LineBuffer.NumLines * LineAdvance;
+    int ContentHeight = ComputeContentHeight(&LineBuffer, BackBuffer.Width - ScrollBarWidth, &Font);
 
     SDL_StartTextInput();
     bool Running = true;
@@ -254,8 +282,6 @@ int main(int argc, char** argv)
                                 LineBuffer.Lines[LineBuffer.NumLines-2].Size - PromptLen);
 
                         LineBufferAddLine(&LineBuffer, Prompt);
-
-                        ContentHeight = LineBuffer.NumLines * LineAdvance;
 
                         AutoScroll = true;
                     }
@@ -298,27 +324,36 @@ int main(int argc, char** argv)
             }
         }
 
+        ContentHeight = ComputeContentHeight(&LineBuffer, BackBuffer.Width - ScrollBarWidth, &Font);
+
         if (AutoScroll)
         {
             // Scroll down to current line
             ScrollPosition = MaxI(0, ContentHeight - BackBuffer.Height);
         }
 
+
         memset(BackBuffer.Data, 0, BackBuffer.Width*BackBuffer.Height*4);
 
         // TODO: Line wrapping
         int FontAscent = FontGetAscent(&Font);
 
+        int CharactersPerRow = (BackBuffer.Width-ScrollBarWidth)  / CharacterWidth;
 
         int YPos = FontAscent;
         for (int i = 0; i < LineBuffer.NumLines; i++) {
             line* Line = &LineBuffer.Lines[i];
-            PixelBufferDrawText(&BackBuffer, &Font, Line->String, Line->Size, 1, YPos - ScrollPosition, 0xffffff);
-            YPos += LineAdvance;
+
+            for (int Pos = 0; Pos < Line->Size; Pos += CharactersPerRow) {
+                PixelBufferDrawText(&BackBuffer, &Font, Line->String + Pos, 
+                                    MinI(Line->Size - Pos, CharactersPerRow),
+                                    1, YPos - ScrollPosition, 0xffffff);
+
+                YPos += LineAdvance;
+            }
         }
 
         // Draw scroll bar
-        int ScrollBarWidth = 14;
 
         float VisibleRatio = (float)BackBuffer.Height / ContentHeight;
         if (VisibleRatio > 1.0f)

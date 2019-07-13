@@ -3,7 +3,7 @@ Milestone 1:
 * Terminal emulator
     - window handling
         . Resize
-    - line wrapping
+    - cursor
 
 * Execute command
     - start process

@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#define LINE_BUFFER_BLOCK_SIZE 300//1024 * 1024
+#define LINE_BUFFER_BLOCK_SIZE 1024 * 1024
 #define LINE_CAPACITY 8192
 
 
