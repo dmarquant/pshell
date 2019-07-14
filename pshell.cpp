@@ -6,6 +6,7 @@
 #include "stb_truetype.h"
 
 #include "linebuffer.cpp"
+#include "process.cpp"
 
 int
 MinI(int A, int B)
@@ -198,7 +199,6 @@ ComputeContentHeight(line_buffer* LineBuffer, int TextAreaWidth, font* Font) {
 
 int main(int argc, char** argv)
 {
-
     SDL_Init(SDL_INIT_VIDEO);
 
     int WindowWidth = 800;
@@ -248,6 +248,8 @@ int main(int argc, char** argv)
     bool Running = true;
     while (Running)
     {
+        process Process = {};
+
         bool AutoScroll = false;
 
         SDL_Event E;
@@ -275,15 +277,14 @@ int main(int argc, char** argv)
                 {
                     if (E.key.keysym.scancode == SDL_SCANCODE_RETURN)
                     {
-                        // TODO: Execute command
-
-                        LineBufferAddLine(&LineBuffer, "Output of: ");
-                        LineBufferAppendToCurrentLine(&LineBuffer, LineBuffer.Lines[LineBuffer.NumLines-2].String + PromptLen,
-                                LineBuffer.Lines[LineBuffer.NumLines-2].Size - PromptLen);
-
-                        LineBufferAddLine(&LineBuffer, Prompt);
-
                         AutoScroll = true;
+
+                        char Program[1024];
+                        line* CurrentLine = &LineBuffer.Lines[LineBuffer.NumLines-1];
+                        memcpy(Program, CurrentLine->String + PromptLen, CurrentLine->Size - PromptLen);
+                        Program[CurrentLine->Size - PromptLen] = 0;
+
+                        ProcessCreate(&Process, Program);
                     }
                     else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
                     {
@@ -322,6 +323,35 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+        }
+
+        // Read output from process
+        if (Process.PID)
+        {
+            char Buffer[4096];
+
+            int NRead = 0;
+            int Pos = 0;
+            while ((NRead = ProcessReadFromStdout(&Process, Buffer, sizeof(Buffer))))
+            {
+                while (Pos < NRead) {
+                    char* LineStart = &Buffer[Pos];
+
+                    while (Buffer[Pos] != '\n')
+                        Pos++;
+
+                    Buffer[Pos] = '\0';
+                    Pos++;
+
+                    LineBufferAddLine(&LineBuffer, LineStart);
+                }
+
+                break;
+            } 
+
+            LineBufferAddLine(&LineBuffer, Prompt);
+
+            Process.PID = 0;
         }
 
         ContentHeight = ComputeContentHeight(&LineBuffer, BackBuffer.Width - ScrollBarWidth, &Font);

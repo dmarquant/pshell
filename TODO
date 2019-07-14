@@ -4,10 +4,15 @@ Milestone 1:
     - window handling
         . Resize
     - cursor
+    - clip board
 
 * Execute command
     - start process
     - read back stdout/stderr
 
 * Interactive command (stdin)
+
+* Cmdline Interpreter
+    - glob
+    - redirect output
 
