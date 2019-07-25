@@ -7,7 +7,6 @@ Milestone 1:
     - clip board
 
 * Execute command
-    - start process
     - read back stdout/stderr
 
 * Interactive command (stdin)
@@ -15,4 +14,12 @@ Milestone 1:
 * Cmdline Interpreter
     - glob
     - redirect output
+
+* Usability
+    - color
+    - tab completion
+
+* Builtin commands
+    - exit
+    - cd
 

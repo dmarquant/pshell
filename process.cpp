@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -17,6 +18,8 @@ struct process
 void
 SearchProgramInPath(char* ProgramName, char* Out)
 {
+    // TODO: Don't search in path if ProgramName starts with '.' or '/'
+
     strcpy(Out, ProgramName);
 
     const char* Path = getenv("PATH");
@@ -96,6 +99,7 @@ ProcessCreate(process* Process, char* CommandLine)
 
     if (pipe(fdOut))
         printf("Error in pipe\n");
+
     
     pid_t PID = fork();
 
@@ -106,7 +110,6 @@ ProcessCreate(process* Process, char* CommandLine)
     }
     else if (PID == 0)
     {
-
         if (dup2(fdOut[1], 1) == -1)
             printf("Error in dup2\n");
 
@@ -127,6 +130,11 @@ ProcessCreate(process* Process, char* CommandLine)
 
         Process->PID = PID;
         Process->stdoutFd = fdOut[0];
+        
+        int ret = fcntl(fdOut[0], F_SETFL, O_NONBLOCK);
+        if (ret == -1) {
+            printf("fcntl failed\n");
+        }
     }
 }
 
@@ -134,7 +142,6 @@ int
 ProcessReadFromStdout(process* Process, char* Buffer, int Size)
 {
     int NRead = read(Process->stdoutFd, Buffer, Size);
-
     return NRead;
 }
 

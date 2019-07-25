@@ -228,12 +228,6 @@ int main(int argc, char** argv)
     LoadFont(&Font, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
     Font.Size = 16;
 
-    for (int i = 0; i < 6; i++) {
-        char WorkBuffer[1000];
-        sprintf(WorkBuffer, "%s%d", Prompt, i);
-        LineBufferAddLine(&LineBuffer, WorkBuffer);
-    }
-
     LineBufferAddLine(&LineBuffer, Prompt);
 
     int ScrollBarWidth = 14;
@@ -244,11 +238,12 @@ int main(int argc, char** argv)
     int LineAdvance = FontLineAdvance(&Font);
     int ContentHeight = ComputeContentHeight(&LineBuffer, BackBuffer.Width - ScrollBarWidth, &Font);
 
+    process Process = {};
+
     SDL_StartTextInput();
     bool Running = true;
     while (Running)
     {
-        process Process = {};
 
         bool AutoScroll = false;
 
@@ -325,15 +320,24 @@ int main(int argc, char** argv)
             }
         }
 
+        // TODO: Don't block, just read whats there
+
         // Read output from process
         if (Process.PID)
         {
+            printf("Reading from proc\n");
+
             char Buffer[4096];
 
             int NRead = 0;
-            int Pos = 0;
-            while ((NRead = ProcessReadFromStdout(&Process, Buffer, sizeof(Buffer))))
+            do
             {
+                NRead = ProcessReadFromStdout(&Process, Buffer, sizeof(Buffer));
+                printf("Read %d bytes\n", NRead);
+                if (NRead == -1 && errno == EAGAIN)
+                    printf("Error: %s\n", "eagain");
+                
+                int Pos = 0;
                 while (Pos < NRead) {
                     char* LineStart = &Buffer[Pos];
 
@@ -343,15 +347,30 @@ int main(int argc, char** argv)
                     Buffer[Pos] = '\0';
                     Pos++;
 
+                    AutoScroll = true;
                     LineBufferAddLine(&LineBuffer, LineStart);
+
+                    // TODO: Add incomplete lines, they also need to be continued on the start of the loop
                 }
+            } while (NRead == sizeof(Buffer));
 
-                break;
-            } 
 
-            LineBufferAddLine(&LineBuffer, Prompt);
+            // Check if process is still running
+            int ProcessStatus;
+            int ret = waitpid(Process.PID, &ProcessStatus, WNOHANG);
+            if (ret == -1)
+                perror("waitpid");
 
-            Process.PID = 0;
+            if (ret != 0 && WIFEXITED(ProcessStatus)) {
+                // TODO: Handle abnormal failures
+                
+                AutoScroll = true;
+                LineBufferAddLine(&LineBuffer, Prompt);
+
+                memset(&Process, 0, sizeof(Process));
+
+                printf("Process exited\n");
+            }
         }
 
         ContentHeight = ComputeContentHeight(&LineBuffer, BackBuffer.Width - ScrollBarWidth, &Font);
@@ -365,7 +384,6 @@ int main(int argc, char** argv)
 
         memset(BackBuffer.Data, 0, BackBuffer.Width*BackBuffer.Height*4);
 
-        // TODO: Line wrapping
         int FontAscent = FontGetAscent(&Font);
 
         int CharactersPerRow = (BackBuffer.Width-ScrollBarWidth)  / CharacterWidth;
