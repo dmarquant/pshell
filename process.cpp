@@ -13,6 +13,7 @@ struct process
     pid_t PID;
 
     int stdoutFd;
+    int stdinFd;
 };
 
 void
@@ -96,10 +97,13 @@ ProcessCreate(process* Process, char* CommandLine)
     }
 
     int fdOut[2];
+    int fdIn[2];
 
     if (pipe(fdOut))
         printf("Error in pipe\n");
 
+    if (pipe(fdIn))
+        printf("Error in pipe\n");
     
     pid_t PID = fork();
 
@@ -113,8 +117,14 @@ ProcessCreate(process* Process, char* CommandLine)
         if (dup2(fdOut[1], 1) == -1)
             printf("Error in dup2\n");
 
+        if (dup2(fdIn[0], 0) == -1)
+            printf("Error in dup2\n");
+
         close(fdOut[0]);
         close(fdOut[1]);
+
+        close(fdIn[0]);
+        close(fdIn[1]);
 
         execv(Argv[0], Argv);
 
@@ -127,9 +137,11 @@ ProcessCreate(process* Process, char* CommandLine)
     else
     {
         close(fdOut[1]);
+        close(fdIn[0]);
 
         Process->PID = PID;
         Process->stdoutFd = fdOut[0];
+        Process->stdinFd = fdIn[1];
         
         int ret = fcntl(fdOut[0], F_SETFL, O_NONBLOCK);
         if (ret == -1) {
@@ -145,35 +157,22 @@ ProcessReadFromStdout(process* Process, char* Buffer, int Size)
     return NRead;
 }
 
-#if 0
 int
-main(int argc, char** argv)
+ProcessExited(process* Process)
 {
-    process Process;
+    int ProcessStatus;
+    int ret = waitpid(Process->PID, &ProcessStatus, WNOHANG);
+    
+    if (ret == -1)
+        perror("waitpid");
 
-    ProcessCreate(&Process, "/bin/ls");
-
-
-    for (;;)
+    if (ret != 0 && WIFEXITED(ProcessStatus))
     {
-        int Size = 10;
-        char Buf[Size];
-
-        ssize_t count = read(Process.stdoutFd, Buf, Size);
-        if (count < 0) {
-            printf("Error in read\n");
-        }
-
-        if (count == 0) {
-            break;
-        }
-
-        printf("Out(%d): %.*s\n", count, count, Buf);
+        return 1;
     }
-
-    int wstatus;
-    waitpid(Process.PID, &wstatus, 0);
-
-    return 0;
+    else
+    {
+        return 0;
+    }
 }
-#endif
+

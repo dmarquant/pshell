@@ -274,12 +274,19 @@ int main(int argc, char** argv)
                     {
                         AutoScroll = true;
 
-                        char Program[1024];
-                        line* CurrentLine = &LineBuffer.Lines[LineBuffer.NumLines-1];
-                        memcpy(Program, CurrentLine->String + PromptLen, CurrentLine->Size - PromptLen);
-                        Program[CurrentLine->Size - PromptLen] = 0;
+                        if (Process.PID) 
+                        {
+                            write(Process.stdinFd, "\n", 1);
+                        }
+                        else
+                        {
+                            char Program[1024];
+                            line* CurrentLine = &LineBuffer.Lines[LineBuffer.NumLines-1];
+                            memcpy(Program, CurrentLine->String + PromptLen, CurrentLine->Size - PromptLen);
+                            Program[CurrentLine->Size - PromptLen] = 0;
 
-                        ProcessCreate(&Process, Program);
+                            ProcessCreate(&Process, Program);
+                        }
                     }
                     else if (E.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
                     {
@@ -315,6 +322,11 @@ int main(int argc, char** argv)
                 {
                     LineBufferAppendToCurrentLine(&LineBuffer, E.text.text, strlen(E.text.text));
                     AutoScroll = true;
+
+                    if (Process.PID)
+                        write(Process.stdinFd, E.text.text, strlen(E.text.text));
+
+                    // TODO: If process is running, buffer input to send to the process
                 }
                 break;
             }
@@ -333,15 +345,15 @@ int main(int argc, char** argv)
             do
             {
                 NRead = ProcessReadFromStdout(&Process, Buffer, sizeof(Buffer));
-                printf("Read %d bytes\n", NRead);
-                if (NRead == -1 && errno == EAGAIN)
-                    printf("Error: %s\n", "eagain");
+                if (NRead > 0)
+                    printf("Read %d bytes\n", NRead);
                 
                 int Pos = 0;
-                while (Pos < NRead) {
+                while (Pos < NRead)
+                {
                     char* LineStart = &Buffer[Pos];
 
-                    while (Buffer[Pos] != '\n')
+                    while (Buffer[Pos] != '\n' && Pos < NRead)
                         Pos++;
 
                     Buffer[Pos] = '\0';
@@ -356,12 +368,8 @@ int main(int argc, char** argv)
 
 
             // Check if process is still running
-            int ProcessStatus;
-            int ret = waitpid(Process.PID, &ProcessStatus, WNOHANG);
-            if (ret == -1)
-                perror("waitpid");
-
-            if (ret != 0 && WIFEXITED(ProcessStatus)) {
+            if (ProcessExited(&Process))
+            {
                 // TODO: Handle abnormal failures
                 
                 AutoScroll = true;
@@ -389,10 +397,12 @@ int main(int argc, char** argv)
         int CharactersPerRow = (BackBuffer.Width-ScrollBarWidth)  / CharacterWidth;
 
         int YPos = FontAscent;
-        for (int i = 0; i < LineBuffer.NumLines; i++) {
+        for (int i = 0; i < LineBuffer.NumLines; i++)
+        {
             line* Line = &LineBuffer.Lines[i];
 
-            for (int Pos = 0; Pos < Line->Size; Pos += CharactersPerRow) {
+            for (int Pos = 0; Pos < Line->Size; Pos += CharactersPerRow)
+            {
                 PixelBufferDrawText(&BackBuffer, &Font, Line->String + Pos, 
                                     MinI(Line->Size - Pos, CharactersPerRow),
                                     1, YPos - ScrollPosition, 0xffffff);

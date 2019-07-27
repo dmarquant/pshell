@@ -124,38 +124,3 @@ LineBufferAppendToCurrentLine(line_buffer* LineBuffer, const char* Str, int Size
         CurrentLine->Size = NewSize;
     }
 }
-
-#if 0
-int main(int argc, char** argv)
-{
-    line_buffer LineBuffer = {};
-    LineBufferInit(&LineBuffer);
-
-    for (int i = 0; i < 100000; i++) 
-    {
-        LineBufferAddLine(&LineBuffer, "Hello, world");
-        LineBufferAddLine(&LineBuffer, "My name is David");
-        LineBufferAddLine(&LineBuffer, "Ich bin ein Berliner");
-        LineBufferAddLine(&LineBuffer, "I have a dream");
-        LineBufferAddLine(&LineBuffer, "Yes we can");
-        LineBufferAddLine(&LineBuffer, "Niemand will eine Mauer bauen");
-    }
-
-    for (int I = 0; I < LineBuffer.NumLines; I += 1)
-    {
-        printf("Line(%d): %.*s\n", I, LineBuffer.Lines[I].Size, LineBuffer.Lines[I].String);
-    }
-
-    int NumBlocks = 1;
-    memory_block* CurrentBlock = LineBuffer.FirstBlock;
-    while (CurrentBlock)
-    {
-        CurrentBlock = CurrentBlock->NextBlock;
-        NumBlocks++;
-    }
-
-    printf("%d blocks allocated\n", NumBlocks);
-
-    char c = fgetc(stdin);
-}
-#endif
