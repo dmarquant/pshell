@@ -5,11 +5,10 @@ Milestone 1:
         . Resize
     - cursor
     - clip board
+    - Ctrl-C
 
 * Execute command
-    - read back stdout/stderr
-
-* Interactive command (stdin)
+    - read back stderr
 
 * Cmdline Interpreter
     - glob
@@ -22,4 +21,13 @@ Milestone 1:
 * Builtin commands
     - exit
     - cd
+
+* Cross platform
+    - windows support
+
+Milestone 2:
+
+* Interactive commands
+    - Use pty on unix to support more complicated console programs (sqlite, gdb, ...)
+    - On windows msdn: 'CreatePseudoConsole'
 

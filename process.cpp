@@ -117,6 +117,10 @@ ProcessCreate(process* Process, char* CommandLine)
         if (dup2(fdOut[1], 1) == -1)
             printf("Error in dup2\n");
 
+        // Duplicate stderr to the same fd
+        if (dup2(fdOut[1], 2) == -1)
+            printf("Error in dup2\n");
+
         if (dup2(fdIn[0], 0) == -1)
             printf("Error in dup2\n");
 
